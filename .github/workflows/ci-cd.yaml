@@ -5,9 +5,9 @@ on:
     branches:
       - main  # Trigger on changes to the main branch
     paths:
-      - '**/*.py'       # Detect changes to Python files
-      - '**/*.dvc'      # Detect changes to DVC files
-      - 'data/**'       # Detect changes to data files
+      - '**.py'         # Detect changes to Python files
+      - '**.dvc'        # Detect changes to DVC files
+      - 'data/**'       # Detect changes to data
   pull_request:         # Trigger on pull requests
     branches:
       - main
@@ -31,34 +31,39 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        pip install -r requirements.txt
 
     # Step 4: Pull data from DVC
     - name: Pull data using DVC
       run: |
-        python -m pip install dvc[all]
+        pip install dvc[all]
         dvc pull
-      env:
-        DVC_REMOTE: ${{ secrets.DVC_REMOTE_URL }}
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-    # Step 5: Run the ML pipeline
-    - name: Run ML pipeline
+    # Step 5: Log in to Google Cloud
+    - name: Authenticate with Google Cloud
       run: |
-        if [ -f pipeline.py ]; then python pipeline.py; else echo "pipeline.py not found"; fi
+        echo "${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}" > $HOME/gcloud-key.json
+        gcloud auth activate-service-account --key-file=$HOME/gcloud-key.json
 
-    # Step 6: Log in to Docker Hub
+    # Step 6: List files in the GCS bucket using gsutil
+    - name: List files in GCS bucket
+      run: gsutil ls gs://dvcmlops/data
+
+    # Step 7: Run the ML pipeline
+    - name: Run ML pipeline
+      run: python pipeline.py
+
+    # Step 8: Log in to Docker Hub
     - name: Log in to Docker Hub
       uses: docker/login-action@v2
       with:
         username: ${{ secrets.DOCKER_USERNAME }}
         password: ${{ secrets.DOCKER_PASSWORD }}
 
-    # Step 7: Build Docker image
+    # Step 9: Build Docker image
     - name: Build Docker image
       run: docker build -t rbenfraj46/insurance_model:latest .
 
-    # Step 8: Push Docker image to Docker Hub
+    # Step 10: Push Docker image to Docker Hub
     - name: Push Docker image to Docker Hub
       run: docker push rbenfraj46/insurance_model:latest
